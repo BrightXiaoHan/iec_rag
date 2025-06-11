@@ -20,6 +20,7 @@ export default function App() {
     initial_search_query_count: number;
     max_research_loops: number;
     reasoning_model: string;
+    data_source: string;
   }>({
     apiUrl: import.meta.env.DEV
       ? "http://localhost:2024"
@@ -33,7 +34,7 @@ export default function App() {
       let processedEvent: ProcessedEvent | null = null;
       if (event.generate_query) {
         processedEvent = {
-          title: "Generating Search Queries",
+          title: "生成搜索查询",
           data: event.generate_query.query_list.join(", "),
         };
       } else if (event.web_research) {
@@ -43,25 +44,30 @@ export default function App() {
           ...new Set(sources.map((s: any) => s.label).filter(Boolean)),
         ];
         const exampleLabels = uniqueLabels.slice(0, 3).join(", ");
+        
+        // 根据数据源类型显示不同的标题
+        const dataSource = event.web_research.data_source || "internet";
+        const title = dataSource === "knowledge_base" ? "知识库搜索" : "网络搜索";
+        
         processedEvent = {
-          title: "Web Research",
-          data: `Gathered ${numSources} sources. Related to: ${
+          title: title,
+          data: `收集了 ${numSources} 个来源。相关内容: ${
             exampleLabels || "N/A"
           }.`,
         };
       } else if (event.reflection) {
         processedEvent = {
-          title: "Reflection",
+          title: "反思分析",
           data: event.reflection.is_sufficient
-            ? "Search successful, generating final answer."
-            : `Need more information, searching for ${event.reflection.follow_up_queries.join(
+            ? "搜索成功，正在生成最终答案。"
+            : `需要更多信息，搜索: ${event.reflection.follow_up_queries.join(
                 ", "
               )}`,
         };
       } else if (event.finalize_answer) {
         processedEvent = {
-          title: "Finalizing Answer",
-          data: "Composing and presenting the final answer.",
+          title: "生成最终答案",
+          data: "正在整理和呈现最终答案。",
         };
         hasFinalizeEventOccurredRef.current = true;
       }
@@ -103,29 +109,28 @@ export default function App() {
   }, [thread.messages, thread.isLoading, processedEventsTimeline]);
 
   const handleSubmit = useCallback(
-    (submittedInputValue: string, effort: string, model: string) => {
+    (submittedInputValue: string, dataSource: string, model: string) => {
       if (!submittedInputValue.trim()) return;
       setProcessedEventsTimeline([]);
       hasFinalizeEventOccurredRef.current = false;
 
-      // convert effort to, initial_search_query_count and max_research_loops
-      // low means max 1 loop and 1 query
-      // medium means max 3 loops and 3 queries
-      // high means max 10 loops and 5 queries
+      // 根据数据源设置搜索参数
+      // 互联网搜索使用中等强度的搜索参数
+      // 私有知识库搜索使用较少的循环次数
       let initial_search_query_count = 0;
       let max_research_loops = 0;
-      switch (effort) {
-        case "low":
-          initial_search_query_count = 1;
-          max_research_loops = 1;
-          break;
-        case "medium":
+      switch (dataSource) {
+        case "internet":
           initial_search_query_count = 3;
           max_research_loops = 3;
           break;
-        case "high":
-          initial_search_query_count = 5;
-          max_research_loops = 10;
+        case "knowledge_base":
+          initial_search_query_count = 2;
+          max_research_loops = 2;
+          break;
+        default:
+          initial_search_query_count = 3;
+          max_research_loops = 3;
           break;
       }
 
@@ -142,6 +147,7 @@ export default function App() {
         initial_search_query_count: initial_search_query_count,
         max_research_loops: max_research_loops,
         reasoning_model: model,
+        data_source: dataSource, // 添加数据源参数
       });
     },
     [thread]

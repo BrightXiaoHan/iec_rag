@@ -21,6 +21,7 @@ class OverallState(TypedDict):
     max_research_loops: int
     research_loop_count: int
     reasoning_model: str
+    data_source: str
 
 
 class ReflectionState(TypedDict):
@@ -43,6 +44,7 @@ class QueryGenerationState(TypedDict):
 class WebSearchState(TypedDict):
     search_query: str
     id: str
+    data_source: str
 
 
 @dataclass(kw_only=True)

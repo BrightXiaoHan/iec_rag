@@ -3,7 +3,7 @@ import { InputForm } from "./InputForm";
 interface WelcomeScreenProps {
   handleSubmit: (
     submittedInputValue: string,
-    effort: string,
+    dataSource: string,
     model: string
   ) => void;
   onCancel: () => void;
@@ -18,7 +18,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   <div className="flex flex-col items-center justify-center text-center px-4 flex-1 w-full max-w-3xl mx-auto gap-4">
     <div>
       <h1 className="text-5xl md:text-6xl font-semibold text-neutral-100 mb-3">
-        Welcome.
+        Welcom to IEC knowledge QA agent.
       </h1>
       <p className="text-xl md:text-2xl text-neutral-400">
         How can I help you today?
@@ -33,7 +33,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       />
     </div>
     <p className="text-xs text-neutral-500">
-      Powered by Qwen and LangChain LangGraph.
+      Powered by Qwen, LangChain LangGraph, DuckDuckGo and Milvus.
     </p>
   </div>
 );

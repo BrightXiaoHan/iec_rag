@@ -29,6 +29,7 @@ from agent.utils import (
     insert_citation_markers,
     resolve_urls,
     search_web,
+    search_by_data_source,
 )
 
 load_dotenv()
@@ -91,21 +92,27 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     return {"query_list": result.query}
 
 
-def continue_to_web_research(state: QueryGenerationState):
+def continue_to_web_research(state: OverallState):
     """LangGraph node that sends the search queries to the web research node.
 
     This is used to spawn n number of web research nodes, one for each search query.
     """
+    data_source = state.get("data_source", "internet")
     return [
-        Send("web_research", {"search_query": search_query, "id": int(idx)})
+        Send("web_research", {
+            "search_query": search_query, 
+            "id": int(idx),
+            "data_source": data_source
+        })
         for idx, search_query in enumerate(state["query_list"])
     ]
 
 
 def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
-    """LangGraph node that performs web research using DuckDuckGo search.
+    """LangGraph node that performs research using different data sources.
 
-    Executes a web search using DuckDuckGo search API in combination with OpenAI-compatible API.
+    Executes search using either DuckDuckGo (internet) or Milvus (knowledge base) 
+    based on the data_source parameter.
 
     Args:
         state: Current graph state containing the search query and research loop count
@@ -117,8 +124,11 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     # Configure
     configurable = Configuration.from_runnable_config(config)
     
-    # Perform web search
-    search_results = search_web(state["search_query"], num_results=5)
+    # Get data source from state
+    data_source = state.get("data_source", "internet")
+    
+    # Perform search based on data source
+    search_results = search_by_data_source(state["search_query"], data_source, num_results=5)
     
     # Create context from search results
     search_context = "\n\n".join([
@@ -221,6 +231,7 @@ def evaluate_research(
                 {
                     "search_query": follow_up_query,
                     "id": state["number_of_ran_queries"] + int(idx),
+                    "data_source": state.get("data_source", "internet"),
                 },
             )
             for idx, follow_up_query in enumerate(state["follow_up_queries"])
