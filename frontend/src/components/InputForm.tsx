@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { SquarePen, Brain, Send, StopCircle, Zap, Cpu } from "lucide-react";
+import { SquarePen, Brain, Send, StopCircle, Zap, Cpu, Home } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -26,7 +26,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 }) => {
   const [internalInputValue, setInternalInputValue] = useState("");
   const [effort, setEffort] = useState("medium");
-  const [model, setModel] = useState("gemini-2.5-flash-preview-04-17");
+  const [model, setModel] = useState("qwen-max");
 
   const handleInternalSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -61,7 +61,7 @@ export const InputForm: React.FC<InputFormProps> = ({
           onChange={(e) => setInternalInputValue(e.target.value)}
           onKeyDown={handleInternalKeyDown}
           placeholder="Who won the Euro 2024 and scored the most goals?"
-          className={`w-full text-neutral-100 placeholder-neutral-500 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none 
+          className={`w-full text-neutral-100 placeholder-neutral-500 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none
                         md:text-base  min-h-[56px] max-h-[200px]`}
           rows={1}
         />
@@ -132,32 +132,33 @@ export const InputForm: React.FC<InputFormProps> = ({
               Model
             </div>
             <Select value={model} onValueChange={setModel}>
-              <SelectTrigger className="w-[150px] bg-transparent border-none cursor-pointer">
+              <SelectTrigger className="w-[180px] bg-transparent border-none cursor-pointer">
                 <SelectValue placeholder="Model" />
               </SelectTrigger>
               <SelectContent className="bg-neutral-700 border-neutral-600 text-neutral-300 cursor-pointer">
+                {/* OpenAI Models */}
                 <SelectItem
-                  value="gemini-2.0-flash"
+                  value="qwen-max"
                   className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
                 >
                   <div className="flex items-center">
-                    <Zap className="h-4 w-4 mr-2 text-yellow-400" /> 2.0 Flash
+                    <Zap className="h-4 w-4 mr-2 text-yellow-400" /> Qwen-Max
                   </div>
                 </SelectItem>
                 <SelectItem
-                  value="gemini-2.5-flash-preview-04-17"
+                  value="qwen3-235b-a22b"
                   className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
                 >
                   <div className="flex items-center">
-                    <Zap className="h-4 w-4 mr-2 text-orange-400" /> 2.5 Flash
+                    <Zap className="h-4 w-4 mr-2 text-orange-400" /> Qwen3-235b-a22b
                   </div>
                 </SelectItem>
                 <SelectItem
-                  value="gemini-2.5-pro-preview-05-06"
+                  value="qwen2.5-72b-instruct"
                   className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
                 >
                   <div className="flex items-center">
-                    <Cpu className="h-4 w-4 mr-2 text-purple-400" /> 2.5 Pro
+                    <Cpu className="h-4 w-4 mr-2 text-purple-400" /> Qwen2.5-72b-instruct
                   </div>
                 </SelectItem>
               </SelectContent>

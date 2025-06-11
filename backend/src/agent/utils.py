@@ -1,3 +1,7 @@
+import requests
+import json
+from bs4 import BeautifulSoup
+from urllib.parse import quote_plus
 from typing import Any, Dict, List
 from langchain_core.messages import AnyMessage, AIMessage, HumanMessage
 
@@ -19,148 +23,133 @@ def get_research_topic(messages: List[AnyMessage]) -> str:
     return research_topic
 
 
-def resolve_urls(urls_to_resolve: List[Any], id: int) -> Dict[str, str]:
+def search_web(query: str, num_results: int = 5) -> List[Dict[str, str]]:
     """
-    Create a map of the vertex ai search urls (very long) to a short url with a unique id for each url.
-    Ensures each original URL gets a consistent shortened form while maintaining uniqueness.
+    Perform a web search using DuckDuckGo search (no API key required).
+    
+    Args:
+        query: The search query
+        num_results: Number of results to return
+        
+    Returns:
+        List of dictionaries containing title, url, and snippet
     """
-    prefix = f"https://vertexaisearch.cloud.google.com/id/"
-    urls = [site.web.uri for site in urls_to_resolve]
+    search_results = []
+    
+    # Use DuckDuckGo instant answer API
+    ddg_url = f"https://api.duckduckgo.com/?q={quote_plus(query)}&format=json&no_html=1&skip_disambig=1"
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    response = requests.get(ddg_url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        
+        # Get related topics if available
+        if 'RelatedTopics' in data:
+            for topic in data['RelatedTopics'][:num_results]:
+                if isinstance(topic, dict) and 'Text' in topic and 'FirstURL' in topic:
+                    search_results.append({
+                        'title': topic.get('Text', '')[:100] + '...' if len(topic.get('Text', '')) > 100 else topic.get('Text', ''),
+                        'url': topic.get('FirstURL', ''),
+                        'snippet': topic.get('Text', '')
+                    })
+        
+        # If we don't have enough results, try to get the abstract
+        if len(search_results) < num_results and 'Abstract' in data and data['Abstract']:
+            search_results.append({
+                'title': data.get('Heading', query),
+                'url': data.get('AbstractURL', ''),
+                'snippet': data.get('Abstract', '')
+            })
+    
+    # If DuckDuckGo doesn't return enough results, create a fallback result
+    if len(search_results) == 0:
+        search_results.append({
+            'title': f"Search results for: {query}",
+            'url': f"https://duckduckgo.com/?q={quote_plus(query)}",
+            'snippet': f"Please search for '{query}' to find relevant information."
+        })
+    
+    return search_results[:num_results]
 
-    # Create a dictionary that maps each unique URL to its first occurrence index
+
+def resolve_urls(search_results: List[Dict[str, str]], id: int) -> Dict[str, str]:
+    """
+    Create a map of the original URLs to short URLs with unique IDs.
+    """
+    prefix = f"https://search.result.com/id/"
     resolved_map = {}
-    for idx, url in enumerate(urls):
-        if url not in resolved_map:
+    
+    for idx, result in enumerate(search_results):
+        url = result.get('url', '')
+        if url and url not in resolved_map:
             resolved_map[url] = f"{prefix}{id}-{idx}"
-
+    
     return resolved_map
 
 
 def insert_citation_markers(text, citations_list):
     """
-    Inserts citation markers into a text string based on start and end indices.
-
+    Inserts citation markers into a text string based on citations.
+    
     Args:
         text (str): The original text string.
-        citations_list (list): A list of dictionaries, where each dictionary
-                               contains 'start_index', 'end_index', and
-                               'segment_string' (the marker to insert).
-                               Indices are assumed to be for the original text.
-
+        citations_list (list): A list of dictionaries containing citation info
+        
     Returns:
         str: The text with citation markers inserted.
     """
-    # Sort citations by end_index in descending order.
-    # If end_index is the same, secondary sort by start_index descending.
-    # This ensures that insertions at the end of the string don't affect
-    # the indices of earlier parts of the string that still need to be processed.
-    sorted_citations = sorted(
-        citations_list, key=lambda c: (c["end_index"], c["start_index"]), reverse=True
-    )
-
-    modified_text = text
-    for citation_info in sorted_citations:
-        # These indices refer to positions in the *original* text,
-        # but since we iterate from the end, they remain valid for insertion
-        # relative to the parts of the string already processed.
-        end_idx = citation_info["end_index"]
-        marker_to_insert = ""
-        for segment in citation_info["segments"]:
-            marker_to_insert += f" [{segment['label']}]({segment['short_url']})"
-        # Insert the citation marker at the original end_idx position
-        modified_text = (
-            modified_text[:end_idx] + marker_to_insert + modified_text[end_idx:]
-        )
-
-    return modified_text
+    if not citations_list:
+        return text
+    
+    # For OpenAI, we'll append citations at the end of the text
+    citation_markers = ""
+    for citation in citations_list:
+        for segment in citation.get("segments", []):
+            citation_markers += f" [{segment['label']}]({segment['short_url']})"
+    
+    return text + citation_markers
 
 
-def get_citations(response, resolved_urls_map):
+def get_citations_from_search_results(search_results: List[Dict[str, str]], resolved_urls_map: Dict[str, str]) -> List[Dict]:
     """
-    Extracts and formats citation information from a Gemini model's response.
-
-    This function processes the grounding metadata provided in the response to
-    construct a list of citation objects. Each citation object includes the
-    start and end indices of the text segment it refers to, and a string
-    containing formatted markdown links to the supporting web chunks.
-
+    Create citations from search results for OpenAI compatibility.
+    
     Args:
-        response: The response object from the Gemini model, expected to have
-                  a structure including `candidates[0].grounding_metadata`.
-                  It also relies on a `resolved_map` being available in its
-                  scope to map chunk URIs to resolved URLs.
-
+        search_results: List of search result dictionaries
+        resolved_urls_map: Map of original URLs to short URLs
+        
     Returns:
-        list: A list of dictionaries, where each dictionary represents a citation
-              and has the following keys:
-              - "start_index" (int): The starting character index of the cited
-                                     segment in the original text. Defaults to 0
-                                     if not specified.
-              - "end_index" (int): The character index immediately after the
-                                   end of the cited segment (exclusive).
-              - "segments" (list[str]): A list of individual markdown-formatted
-                                        links for each grounding chunk.
-              - "segment_string" (str): A concatenated string of all markdown-
-                                        formatted links for the citation.
-              Returns an empty list if no valid candidates or grounding supports
-              are found, or if essential data is missing.
+        List of citation dictionaries
     """
     citations = []
-
-    # Ensure response and necessary nested structures are present
-    if not response or not response.candidates:
-        return citations
-
-    candidate = response.candidates[0]
-    if (
-        not hasattr(candidate, "grounding_metadata")
-        or not candidate.grounding_metadata
-        or not hasattr(candidate.grounding_metadata, "grounding_supports")
-    ):
-        return citations
-
-    for support in candidate.grounding_metadata.grounding_supports:
-        citation = {}
-
-        # Ensure segment information is present
-        if not hasattr(support, "segment") or support.segment is None:
-            continue  # Skip this support if segment info is missing
-
-        start_index = (
-            support.segment.start_index
-            if support.segment.start_index is not None
-            else 0
-        )
-
-        # Ensure end_index is present to form a valid segment
-        if support.segment.end_index is None:
-            continue  # Skip if end_index is missing, as it's crucial
-
-        # Add 1 to end_index to make it an exclusive end for slicing/range purposes
-        # (assuming the API provides an inclusive end_index)
-        citation["start_index"] = start_index
-        citation["end_index"] = support.segment.end_index
-
-        citation["segments"] = []
-        if (
-            hasattr(support, "grounding_chunk_indices")
-            and support.grounding_chunk_indices
-        ):
-            for ind in support.grounding_chunk_indices:
-                try:
-                    chunk = candidate.grounding_metadata.grounding_chunks[ind]
-                    resolved_url = resolved_urls_map.get(chunk.web.uri, None)
-                    citation["segments"].append(
-                        {
-                            "label": chunk.web.title.split(".")[:-1][0],
-                            "short_url": resolved_url,
-                            "value": chunk.web.uri,
-                        }
-                    )
-                except (IndexError, AttributeError, NameError):
-                    # Handle cases where chunk, web, uri, or resolved_map might be problematic
-                    # For simplicity, we'll just skip adding this particular segment link
-                    # In a production system, you might want to log this.
-                    pass
-        citations.append(citation)
+    
+    for idx, result in enumerate(search_results):
+        url = result.get('url', '')
+        title = result.get('title', f'Source {idx + 1}')
+        
+        if url and url in resolved_urls_map:
+            citation = {
+                "start_index": 0,
+                "end_index": len(result.get('snippet', '')),
+                "segments": [{
+                    "label": title.split('.')[0] if '.' in title else title,
+                    "short_url": resolved_urls_map[url],
+                    "value": url
+                }]
+            }
+            citations.append(citation)
+    
     return citations
+
+
+# Keep the old function for backward compatibility but mark as deprecated
+def get_citations(response, resolved_urls_map):
+    """
+    Legacy function for Gemini compatibility - now returns empty list.
+    Use get_citations_from_search_results for OpenAI implementation.
+    """
+    return []

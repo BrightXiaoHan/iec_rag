@@ -9,23 +9,37 @@ class Configuration(BaseModel):
     """The configuration for the agent."""
 
     query_generator_model: str = Field(
-        default="gemini-2.0-flash",
+        default="qwen-max",
         metadata={
             "description": "The name of the language model to use for the agent's query generation."
         },
     )
 
     reflection_model: str = Field(
-        default="gemini-2.5-flash-preview-04-17",
+        default="qwen-max",
         metadata={
             "description": "The name of the language model to use for the agent's reflection."
         },
     )
 
     answer_model: str = Field(
-        default="gemini-2.5-pro-preview-05-06",
+        default="qwen-max",
         metadata={
             "description": "The name of the language model to use for the agent's answer."
+        },
+    )
+
+    openai_api_base: Optional[str] = Field(
+        default=None,
+        metadata={
+            "description": "Base URL for OpenAI-compatible API (e.g., http://localhost:1234/v1 for local models)"
+        },
+    )
+
+    openai_api_key: str = Field(
+        default="sk-fake-key",
+        metadata={
+            "description": "API key for OpenAI-compatible service (use 'sk-fake-key' for local models)"
         },
     )
 
